@@ -1,0 +1,4 @@
+train_yolov8_object_detection.py
+*.pt
+.codex
+/__pycache__
