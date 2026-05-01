@@ -5,7 +5,7 @@ from ultralytics import YOLO
 
 
 def main() -> None:
-	model_path = Path("best.pt")
+	model_path = Path("buoy.pt")
 	if not model_path.exists():
 		print(f"Model tidak ditemukan: {model_path.resolve()}")
 		return
@@ -56,14 +56,14 @@ def main() -> None:
 			box_height = y2 - y1
 			box_area = box_width * box_height
 
-			if class_name in {"red", "red_buoy"}:
+			if class_name in {"red", "red_ball"}:
 				red_buoys.append({
 					"center": (center_x, center_y),
 					"area": box_area,
 					"box": (int(x1), int(y1), int(x2), int(y2))
 				})
 
-			elif class_name in {"green", "green_buoy"}:
+			elif class_name in {"green", "green_ball"}:
 				green_buoys.append({
 					"center": (center_x, center_y),
 					"area": box_area,
