@@ -4,6 +4,48 @@ import cv2
 from ultralytics import YOLO
 
 
+def choose_best_gate_pair(red_buoys, green_buoys):
+	best_pair = None
+	best_score = -1
+
+	max_y_diff = 120
+	min_x_diff = 40
+	max_area_ratio = 2.2
+
+	for red in red_buoys:
+		for green in green_buoys:
+			red_center = red["center"]
+			green_center = green["center"]
+
+			x_diff = abs(red_center[0] - green_center[0])
+			y_diff = abs(red_center[1] - green_center[1])
+
+			red_area = red["area"]
+			green_area = green["area"]
+
+			if red_area <= 0 or green_area <= 0:
+				continue
+
+			area_ratio = max(red_area, green_area) / min(red_area, green_area)
+
+			if y_diff > max_y_diff:
+				continue
+
+			if x_diff < min_x_diff:
+				continue
+
+			if area_ratio > max_area_ratio:
+				continue
+
+			score = (red_area + green_area) / 2
+
+			if score > best_score:
+				best_score = score
+				best_pair = red, green
+
+	return best_pair
+
+
 def main() -> None:
 	model_path = Path("buoy.pt")
 	if not model_path.exists():
@@ -56,19 +98,17 @@ def main() -> None:
 			box_height = y2 - y1
 			box_area = box_width * box_height
 
+			buoy_data = {
+				"center": (center_x, center_y),
+				"area": box_area,
+				"box": (int(x1), int(y1), int(x2), int(y2))
+			}
+
 			if class_name in {"red", "red_ball"}:
-				red_buoys.append({
-					"center": (center_x, center_y),
-					"area": box_area,
-					"box": (int(x1), int(y1), int(x2), int(y2))
-				})
+				red_buoys.append(buoy_data)
 
 			elif class_name in {"green", "green_ball"}:
-				green_buoys.append({
-					"center": (center_x, center_y),
-					"area": box_area,
-					"box": (int(x1), int(y1), int(x2), int(y2))
-				})
+				green_buoys.append(buoy_data)
 
 		cv2.line(
 			annotated_frame,
@@ -94,15 +134,6 @@ def main() -> None:
 			-1
 		)
 
-		nearest_red = None
-		nearest_green = None
-
-		if len(red_buoys) > 0:
-			nearest_red = max(red_buoys, key=lambda buoy: buoy["area"])
-
-		if len(green_buoys) > 0:
-			nearest_green = max(green_buoys, key=lambda buoy: buoy["area"])
-
 		for buoy in red_buoys:
 			x1, y1, x2, y2 = buoy["box"]
 			cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 180), 2)
@@ -111,43 +142,55 @@ def main() -> None:
 			x1, y1, x2, y2 = buoy["box"]
 			cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 180, 0), 2)
 
-		if nearest_red is not None:
-			red_center = nearest_red["center"]
-			x1, y1, x2, y2 = nearest_red["box"]
+		selected_pair = choose_best_gate_pair(red_buoys, green_buoys)
 
-			cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 4)
+		if selected_pair is not None:
+			nearest_red, nearest_green = selected_pair
+
+			red_center = nearest_red["center"]
+			green_center = nearest_green["center"]
+
+			red_x1, red_y1, red_x2, red_y2 = nearest_red["box"]
+			green_x1, green_y1, green_x2, green_y2 = nearest_green["box"]
+
+			cv2.rectangle(
+				annotated_frame,
+				(red_x1, red_y1),
+				(red_x2, red_y2),
+				(0, 0, 255),
+				4
+			)
+
+			cv2.rectangle(
+				annotated_frame,
+				(green_x1, green_y1),
+				(green_x2, green_y2),
+				(0, 255, 0),
+				4
+			)
+
 			cv2.circle(annotated_frame, red_center, 8, (0, 0, 255), -1)
+			cv2.circle(annotated_frame, green_center, 8, (0, 255, 0), -1)
 
 			cv2.putText(
 				annotated_frame,
-				"Nearest Red",
-				(x1, y1 - 10),
+				"Selected Red",
+				(red_x1, red_y1 - 10),
 				cv2.FONT_HERSHEY_SIMPLEX,
 				0.7,
 				(0, 0, 255),
 				2
 			)
 
-		if nearest_green is not None:
-			green_center = nearest_green["center"]
-			x1, y1, x2, y2 = nearest_green["box"]
-
-			cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 255, 0), 4)
-			cv2.circle(annotated_frame, green_center, 8, (0, 255, 0), -1)
-
 			cv2.putText(
 				annotated_frame,
-				"Nearest Green",
-				(x1, y1 - 10),
+				"Selected Green",
+				(green_x1, green_y1 - 10),
 				cv2.FONT_HERSHEY_SIMPLEX,
 				0.7,
 				(0, 255, 0),
 				2
 			)
-
-		if nearest_red is not None and nearest_green is not None:
-			red_center = nearest_red["center"]
-			green_center = nearest_green["center"]
 
 			mid_x = int((red_center[0] + green_center[0]) / 2)
 			mid_y = int((red_center[1] + green_center[1]) / 2)
@@ -170,6 +213,14 @@ def main() -> None:
 				-1
 			)
 
+			cv2.circle(
+				annotated_frame,
+				(mid_x, mid_y),
+				18,
+				(0, 0, 0),
+				2
+			)
+
 			cv2.line(
 				annotated_frame,
 				(camera_center_x, camera_center_y),
@@ -180,7 +231,7 @@ def main() -> None:
 
 			cv2.putText(
 				annotated_frame,
-				f"Nearest Gate Center: ({mid_x}, {mid_y})",
+				f"Selected Gate Center: ({mid_x}, {mid_y})",
 				(mid_x + 15, mid_y + 25),
 				cv2.FONT_HERSHEY_SIMPLEX,
 				0.7,
@@ -221,23 +272,16 @@ def main() -> None:
 			)
 
 			print(
-				f"Nearest gate center: x={mid_x}, y={mid_y}, "
+				f"Selected gate center: x={mid_x}, y={mid_y}, "
 				f"error_x={error_x}, "
 				f"red_area={nearest_red['area']:.2f}, "
 				f"green_area={nearest_green['area']:.2f}"
 			)
 
 		else:
-			missing = []
-			if nearest_red is None:
-				missing.append("red")
-			if nearest_green is None:
-				missing.append("green")
-			missing_text = ", ".join(missing)
-
 			cv2.putText(
 				annotated_frame,
-				f"Gate not found: missing {missing_text}",
+				"Valid red-green gate not found",
 				(30, height - 70),
 				cv2.FONT_HERSHEY_SIMPLEX,
 				0.8,
@@ -245,7 +289,7 @@ def main() -> None:
 				2
 			)
 
-		cv2.imshow("YOLO Nearest Red-Green Buoy Gate", annotated_frame)
+		cv2.imshow("YOLO Red-Green Buoy Gate Pairing", annotated_frame)
 
 		if cv2.waitKey(1) & 0xFF == ord("q"):
 			break
