@@ -40,8 +40,8 @@ def main() -> None:
 
 		annotated_frame = result.plot()
 
-		red_center = None
-		green_center = None
+		red_buoys = []
+		green_buoys = []
 
 		for box in result.boxes:
 			cls_id = int(box.cls[0])
@@ -52,11 +52,23 @@ def main() -> None:
 			center_x = int((x1 + x2) / 2)
 			center_y = int((y1 + y2) / 2)
 
-			if class_name == "red_buoy":
-				red_center = (center_x, center_y)
+			box_width = x2 - x1
+			box_height = y2 - y1
+			box_area = box_width * box_height
 
-			elif class_name == "green_buoy":
-				green_center = (center_x, center_y)
+			if class_name in {"red", "red_buoy"}:
+				red_buoys.append({
+					"center": (center_x, center_y),
+					"area": box_area,
+					"box": (int(x1), int(y1), int(x2), int(y2))
+				})
+
+			elif class_name in {"green", "green_buoy"}:
+				green_buoys.append({
+					"center": (center_x, center_y),
+					"area": box_area,
+					"box": (int(x1), int(y1), int(x2), int(y2))
+				})
 
 		cv2.line(
 			annotated_frame,
@@ -82,55 +94,61 @@ def main() -> None:
 			-1
 		)
 
-		cv2.putText(
-			annotated_frame,
-			"Camera Center",
-			(camera_center_x + 10, camera_center_y - 10),
-			cv2.FONT_HERSHEY_SIMPLEX,
-			0.6,
-			(255, 255, 0),
-			2
-		)
+		nearest_red = None
+		nearest_green = None
 
-		if red_center is not None:
-			cv2.circle(
-				annotated_frame,
-				red_center,
-				8,
-				(0, 0, 255),
-				-1
-			)
+		if len(red_buoys) > 0:
+			nearest_red = max(red_buoys, key=lambda buoy: buoy["area"])
+
+		if len(green_buoys) > 0:
+			nearest_green = max(green_buoys, key=lambda buoy: buoy["area"])
+
+		for buoy in red_buoys:
+			x1, y1, x2, y2 = buoy["box"]
+			cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 180), 2)
+
+		for buoy in green_buoys:
+			x1, y1, x2, y2 = buoy["box"]
+			cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 180, 0), 2)
+
+		if nearest_red is not None:
+			red_center = nearest_red["center"]
+			x1, y1, x2, y2 = nearest_red["box"]
+
+			cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 4)
+			cv2.circle(annotated_frame, red_center, 8, (0, 0, 255), -1)
 
 			cv2.putText(
 				annotated_frame,
-				f"Red Buoy {red_center}",
-				(red_center[0] + 10, red_center[1] - 10),
+				"Nearest Red",
+				(x1, y1 - 10),
 				cv2.FONT_HERSHEY_SIMPLEX,
-				0.6,
+				0.7,
 				(0, 0, 255),
 				2
 			)
 
-		if green_center is not None:
-			cv2.circle(
-				annotated_frame,
-				green_center,
-				8,
-				(0, 255, 0),
-				-1
-			)
+		if nearest_green is not None:
+			green_center = nearest_green["center"]
+			x1, y1, x2, y2 = nearest_green["box"]
+
+			cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 255, 0), 4)
+			cv2.circle(annotated_frame, green_center, 8, (0, 255, 0), -1)
 
 			cv2.putText(
 				annotated_frame,
-				f"Green Buoy {green_center}",
-				(green_center[0] + 10, green_center[1] - 10),
+				"Nearest Green",
+				(x1, y1 - 10),
 				cv2.FONT_HERSHEY_SIMPLEX,
-				0.6,
+				0.7,
 				(0, 255, 0),
 				2
 			)
 
-		if red_center is not None and green_center is not None:
+		if nearest_red is not None and nearest_green is not None:
+			red_center = nearest_red["center"]
+			green_center = nearest_green["center"]
+
 			mid_x = int((red_center[0] + green_center[0]) / 2)
 			mid_y = int((red_center[1] + green_center[1]) / 2)
 
@@ -152,14 +170,6 @@ def main() -> None:
 				-1
 			)
 
-			cv2.circle(
-				annotated_frame,
-				(mid_x, mid_y),
-				18,
-				(0, 0, 0),
-				2
-			)
-
 			cv2.line(
 				annotated_frame,
 				(camera_center_x, camera_center_y),
@@ -170,7 +180,7 @@ def main() -> None:
 
 			cv2.putText(
 				annotated_frame,
-				f"Gate Center: ({mid_x}, {mid_y})",
+				f"Nearest Gate Center: ({mid_x}, {mid_y})",
 				(mid_x + 15, mid_y + 25),
 				cv2.FONT_HERSHEY_SIMPLEX,
 				0.7,
@@ -210,20 +220,32 @@ def main() -> None:
 				3
 			)
 
-			print(f"Titik tengah buoy merah-hijau: x={mid_x}, y={mid_y}, error_x={error_x}")
+			print(
+				f"Nearest gate center: x={mid_x}, y={mid_y}, "
+				f"error_x={error_x}, "
+				f"red_area={nearest_red['area']:.2f}, "
+				f"green_area={nearest_green['area']:.2f}"
+			)
 
 		else:
+			missing = []
+			if nearest_red is None:
+				missing.append("red")
+			if nearest_green is None:
+				missing.append("green")
+			missing_text = ", ".join(missing)
+
 			cv2.putText(
 				annotated_frame,
-				"Red and Green buoy not detected together",
-				(30, height - 30),
+				f"Gate not found: missing {missing_text}",
+				(30, height - 70),
 				cv2.FONT_HERSHEY_SIMPLEX,
 				0.8,
-				(0, 0, 255),
+				(0, 255, 255),
 				2
 			)
 
-		cv2.imshow("YOLO Buoy Midpoint Visualization", annotated_frame)
+		cv2.imshow("YOLO Nearest Red-Green Buoy Gate", annotated_frame)
 
 		if cv2.waitKey(1) & 0xFF == ord("q"):
 			break
