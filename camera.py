@@ -3,7 +3,6 @@ from pathlib import Path
 import cv2
 from ultralytics import YOLO
 
-
 def choose_best_gate_pair(red_buoys, green_buoys):
 	best_pair = None
 	best_score = -1
@@ -64,6 +63,9 @@ def main() -> None:
 		print(f"Gagal membuka kamera pada index {camera_index}.")
 		print("Pastikan kamera terhubung dan index benar.")
 		return
+
+	cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+	cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
 	print("Model berhasil dimuat. Tekan 'q' untuk keluar.")
 

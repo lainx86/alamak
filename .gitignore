@@ -5,4 +5,5 @@ train_yolov8_object_detection.py
 /datasets
 /runs
 /.ipnyb_checkpoints
+camera2.py
 
